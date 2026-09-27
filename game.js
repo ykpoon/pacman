@@ -354,4 +354,147 @@ function startGame(level) {
     loadQuestion();
 
     // 啟動每秒 60 幀渲染畫布的主循環
-    const canva
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    if (gameInterval) clearInterval(gameInterval);
+    gameInterval = setInterval(() => {
+        updateGame(ctx, canvas);
+    }, 1000 / 60);
+}
+
+function updateLivesUI() {
+    let hearts = "";
+    for (let i = 0; i < lives; i++) hearts += "❤️";
+    document.getElementById('livesVal').innerText = hearts || "💀";
+}
+
+function setDirection(dir) {
+    if (!player) return;
+    switch(dir) {
+        case 'up': player.nextDirX = 0; player.nextDirY = -1; break;
+        case 'down': player.nextDirX = 0; player.nextDirY = 1; break;
+        case 'left': player.nextDirX = -1; player.nextDirY = 0; break;
+        case 'right': player.nextDirX = 1; player.nextDirY = 0; break;
+    }
+}
+
+// 主運作與更新引擎
+function updateGame(ctx, canvas) {
+    if (gameOver) return;
+
+    player.update();
+    ghosts.forEach(ghost => ghost.update());
+
+    // 碰撞檢查
+    for (let i = 0; i < ghosts.length; i++) {
+        const ghost = ghosts[i];
+        const dist = Math.sqrt((player.x - ghost.x)**2 + (player.y - ghost.y)**2);
+        
+        if (dist < 22) { // 判定相碰
+            if (ghost.isCorrect) {
+                // 吃對答案：加分、閃綠光並前進一題
+                score += 10;
+                document.getElementById('scoreVal').innerText = score;
+                currentQuestionIndex++;
+                drawScreenFlash(ctx, canvas, "rgba(57, 255, 20, 0.3)");
+                
+                setTimeout(() => {
+                    loadQuestion();
+                }, 150);
+            } else {
+                // 吃錯答案：扣血、閃紅光、重新分配起點
+                lives--;
+                updateLivesUI();
+                drawScreenFlash(ctx, canvas, "rgba(255, 0, 127, 0.4)");
+
+                if (lives <= 0) {
+                    gameOver = true;
+                    showOverlay('gameOverOverlay');
+                    if (gameInterval) clearInterval(gameInterval);
+                } else {
+                    // 還留有生命，僅重置角色與幽靈位置
+                    player = new Pacman(6, 6);
+                    ghosts.forEach((g, idx) => {
+                        const spawnPositions = [
+                            {x: 1, y: 1}, {x: 11, y: 1}, {x: 1, y: 11}, {x: 11, y: 11}
+                        ];
+                        g.gridX = spawnPositions[idx].x;
+                        g.gridY = spawnPositions[idx].y;
+                        g.x = g.gridX * TILE_SIZE + TILE_SIZE / 2;
+                        g.y = g.gridY * TILE_SIZE + TILE_SIZE / 2;
+                        g.dirX = 0;
+                        g.dirY = -1;
+                    });
+                }
+            }
+            break;
+        }
+    }
+
+    // 繪製迷宮與角色
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawMap(ctx);
+    drawBackgroundDots(ctx);
+    player.draw(ctx);
+    ghosts.forEach(ghost => ghost.draw(ctx));
+}
+
+// 繪圖輔助方法
+function drawScreenFlash(ctx, canvas, colorStyle) {
+    ctx.fillStyle = colorStyle;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawMap(ctx) {
+    for (let r = 0; r < MAP.length; r++) {
+        for (let c = 0; c < MAP[r].length; c++) {
+            if (MAP[r][c] === 1) {
+                ctx.fillStyle = "#121424";
+                ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                
+                ctx.strokeStyle = "#00f0ff";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(c * TILE_SIZE + 2, r * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+            }
+        }
+    }
+}
+
+function drawBackgroundDots(ctx) {
+    for (let r = 0; r < MAP.length; r++) {
+        for (let c = 0; c < MAP[r].length; c++) {
+            if (MAP[r][c] === 0) {
+                if (r === 6 && c === 6) continue;
+                ctx.beginPath();
+                ctx.arc(c * TILE_SIZE + TILE_SIZE/2, r * TILE_SIZE + TILE_SIZE/2, 2.5, 0, 2 * Math.PI);
+                ctx.fillStyle = "rgba(0, 240, 255, 0.4)";
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+    }
+}
+
+// Overlay 畫面顯示輔助
+function showOverlay(id) {
+    hideAllOverlays();
+    document.getElementById(id).style.display = 'flex';
+}
+
+function hideAllOverlays() {
+    const overlays = ['startOverlay', 'nextLevelOverlay', 'gameOverOverlay', 'victoryOverlay'];
+    overlays.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+}
+
+function resetToHome() {
+    if (gameInterval) clearInterval(gameInterval);
+    showOverlay('startOverlay');
+}
+
+function retryCurrentLevel() {
+    startGame(currentLevel);
+}
